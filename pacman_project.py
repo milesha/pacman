@@ -184,6 +184,333 @@ class Ghost(pygame.sprite.Sprite):
             self.is_moving = True
 
 
+class Map(pygame.sprite.Sprite):
+    """
+    Класс карты игры
+    """
+
+    def __init__(self, name):
+        super().__init__(all_maps)
+        image = load_image(name)
+        size_w = image.get_width()
+        size_h = image.get_height()
+        self.image = image
+        # вычисляем маску для эффективного сравнения
+        self.mask = pygame.mask.from_surface(self.image)
+        self.rect = self.image.get_rect()
+        self.rect.x = WIDTH // 2 - size_w // 2
+        self.rect.y = HEIGHT // 2 - size_h // 2
+
+
+class GhostPlay(pygame.sprite.Sprite):
+    """
+    Класс призраков в игровом процессе
+    """
+
+    def __init__(self, num):
+        super().__init__(ghost_sprites)
+        image = load_image(GHOSTSGAME[num % 4][0])
+        size_h = image.get_height()
+        self.num = num % 4
+        # скорость призрака
+        self.v = 3
+        self.way = 1
+        self.p = 1
+        self.image = image
+        # вычисляем маску для эффективного сравнения
+        self.mask = pygame.mask.from_surface(self.image)
+        self.rect = self.image.get_rect()
+        if num % 2 == 0:
+            self.rect.x = WIDTH // 2 + 235
+            self.rect.y = HEIGHT // 2 - size_h // 2 - 20
+        else:
+            self.rect.x = WIDTH // 2 - 272
+            self.rect.y = HEIGHT // 2 - size_h // 2 - 20
+
+    def move(self):
+        """
+        Движение призрака по карте
+        :return:
+        """
+        global stop_game
+        if self.way == 1:
+            self.image = load_image(GHOSTSGAME[self.num][0])
+            self.rect.y -= self.v
+            if pygame.sprite.collide_mask(self, map_on_screen):
+                self.rect.y += 2 * self.v
+                self.way = choice([2, 4])
+
+        elif self.way == 2:
+            self.image = load_image(GHOSTSGAME[self.num][3])
+            self.rect.x += self.v
+            if pygame.sprite.collide_mask(self, map_on_screen):
+                self.rect.x -= 2 * self.v
+                self.way = choice([1, 3])
+
+        elif self.way == 3:
+            self.image = load_image(GHOSTSGAME[self.num][1])
+            self.rect.y += self.v
+            if pygame.sprite.collide_mask(self, map_on_screen):
+                self.rect.y -= 2 * self.v
+                self.way = choice([2, 4])
+
+        elif self.way == 4:
+            self.image = load_image(GHOSTSGAME[self.num][2])
+            self.rect.x -= self.v
+            if pygame.sprite.collide_mask(self, map_on_screen):
+                self.rect.x += 2 * self.v
+                self.way = choice([1, 3])
+
+        if self.way > 4:
+            self.way = 1
+
+        for pacman in pacman_sprite:
+            if pygame.sprite.collide_mask(self, pacman):
+                stop_game = True
+
+    def change(self):
+        """
+        Изменение направления движения призрака
+        :return:
+        """
+        last = self.way
+        while self.way == 4 - last:
+            self.way = randint(1, 4)
+
+
+class Pacman(pygame.sprite.Sprite):
+    def __init__(self, group, sheet, columns, rows, x, y, start_x=None, start_y=None):
+        super().__init__(group)
+        self.sheet_right = sheet
+        self.columns, self.rows = columns, rows
+        self.frames = []
+        self.cut_sheet(self.sheet_right, columns, rows)
+        self.cur_frame = 0
+        self.image = self.frames[self.cur_frame]
+        self.rect = self.rect.move(x, y)
+        if map_on_screen_num != 3:
+            self.rect.x = WIDTH // 2 - 13
+            self.rect.y = HEIGHT // 2 - 35
+        else:
+            self.rect.x = WIDTH // 2 - 7
+            self.rect.y = HEIGHT // 2 - 15
+        self.x1, self.y1 = self.rect.x, self.rect.y
+        if start_x and start_y:
+            self.rect.x = start_x
+            self.rect.y = start_y
+        self.speed = 3
+        self.last_pos = "right"
+
+        self.sheet_left = pygame.transform.flip(sheet, True, False)
+        self.sheet_up = pygame.transform.rotate(sheet, 90)
+        self.sheet_down = pygame.transform.rotate(sheet, -90)
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(0, 0, sheet.get_width() // columns,
+                                sheet.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(
+                    frame_location, self.rect.size)))
+
+    def update(self):
+        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+        self.image = self.frames[self.cur_frame]
+
+    def move(self, pos=0):
+        global stop_game, score
+        if pos == 0:
+            pos = self.last_pos
+        f1 = False
+        if pos == "right":
+            if self.last_pos:
+                if self.last_pos == "up" or self.last_pos == "down":
+                    self.rows, self.columns = self.columns, self.rows
+                    f1 = True
+
+            self.frames = []
+            self.cut_sheet(self.sheet_right, self.columns, self.rows)
+
+            self.image = self.frames[self.cur_frame]
+            self.rect = self.rect.move(self.x1, self.y1)
+
+            self.rect.x += self.speed
+            self.x1 = self.rect.x
+            self.last_pos = "right"
+
+            if pygame.sprite.collide_mask(self, map_on_screen):
+                self.rect.x -= self.speed
+                self.x1 = self.rect.x
+
+                if f1:
+                    if pygame.sprite.collide_mask(self, map_on_screen):
+                        if pygame.sprite.collide_mask(self, map_on_screen):
+                            if self.last_pos == "up":
+
+                                self.rect.y += self.speed
+                                self.y1 = self.rect.y
+                            else:
+                                self.rect.y -= self.speed
+                                self.y1 = self.rect.y
+
+        if pos == "left":
+            if self.last_pos:
+                if self.last_pos == "up" or self.last_pos == "down":
+                    self.rows, self.columns = self.columns, self.rows
+                    f1 = True
+
+            self.frames = []
+            self.cut_sheet(self.sheet_left, self.columns, self.rows)
+
+            self.image = self.frames[self.cur_frame]
+            self.rect = self.rect.move(self.x1, self.y1)
+
+            self.rect.x -= self.speed
+            self.x1 = self.rect.x
+            self.last_pos = "left"
+            if pygame.sprite.collide_mask(self, map_on_screen):
+                self.rect.x += self.speed
+                self.x1 = self.rect.x
+
+                if f1:
+                    if pygame.sprite.collide_mask(self, map_on_screen):
+                        if self.last_pos == "up":
+                            self.rect.y += self.speed
+                            self.y1 = self.rect.y
+                        else:
+                            self.rect.y -= self.speed
+                            self.y1 = self.rect.y
+
+        if pos == "up":
+            if self.last_pos:
+                if self.last_pos != "up" and self.last_pos != "down":
+                    self.rows, self.columns = self.columns, self.rows
+                    f1 = True
+
+            self.frames = []
+            self.cut_sheet(self.sheet_up, self.columns, self.rows)
+
+            self.image = self.frames[self.cur_frame]
+            self.rect = self.rect.move(self.x1, self.y1)
+
+            self.rect.y -= self.speed
+            self.y1 = self.rect.y
+            self.last_pos = "up"
+
+            if pygame.sprite.collide_mask(self, map_on_screen):
+                self.rect.y += self.speed
+                self.y1 = self.rect.y
+
+                if f1:
+                    if pygame.sprite.collide_mask(self, map_on_screen):
+                        if self.last_pos == "left":
+                            self.rect.x += self.speed
+                            self.x1 = self.rect.x
+                        else:
+                            self.rect.x -= self.speed
+                            self.x1 = self.rect.x
+
+        if pos == "down":
+            if self.last_pos:
+                if self.last_pos != "up" and self.last_pos != "down":
+                    self.rows, self.columns = self.columns, self.rows
+                    f1 = True
+
+            self.frames = []
+            self.cut_sheet(self.sheet_down, self.columns, self.rows)
+
+            self.image = self.frames[self.cur_frame]
+            self.rect = self.rect.move(self.x1, self.y1)
+
+            self.rect.y += self.speed
+            self.y1 = self.rect.y
+            self.last_pos = "down"
+
+            if pygame.sprite.collide_mask(self, map_on_screen):
+                self.rect.y -= self.speed
+                self.y1 = self.rect.y
+                if f1:
+                    if pygame.sprite.collide_mask(self, map_on_screen):
+
+                        if self.last_pos == "left":
+                            self.rect.x += self.speed
+                            self.x1 = self.rect.x
+                        else:
+                            self.rect.x -= self.speed
+                            self.x1 = self.rect.x
+
+        for ghost in ghost_sprites:
+            if pygame.sprite.collide_mask(self, ghost):
+                if self.last_pos == "down":
+                    self.rect.y -= self.speed
+                if self.last_pos == "up":
+                    self.rect.y += self.speed
+                if self.last_pos == "left":
+                    self.rect.x += self.speed
+                if self.last_pos == "right":
+                    self.rect.x -= self.speed
+                stop_game = True
+
+        for point in all_points:
+            if pygame.sprite.collide_mask(self, point):
+                f = True
+                for rect in all_rects:
+                    if pygame.sprite.collide_mask(self, rect):
+                        f = False
+                if f:
+                    score += 10
+                    Rects(self.rect, self.last_pos)
+
+
+class Rects(pygame.sprite.Sprite):
+    """
+    Прямоугольники, закрывающие баллы
+    """
+
+    def __init__(self, pos, way):
+        super().__init__(all_rects)
+        image = load_image('rect.png')
+        self.image = image
+        # вычисляем маску для эффективного сравнения
+        self.mask = pygame.mask.from_surface(self.image)
+        self.rect = self.image.get_rect()
+        self.rect.x, self.rect.y = pos[0], pos[1]
+
+        if way == "left":
+            self.image = pygame.transform.rotate(image, 90)
+            self.rect.x -= 5
+
+        if way == "right":
+            self.rect.x += 5
+            self.image = pygame.transform.rotate(image, 90)
+        if way == "up":
+            self.rect.y -= 5
+        if way == "down":
+            self.rect.y += 5
+
+
+class Points(pygame.sprite.Sprite):
+    """
+    Загрузка и расстановка баллов на карте
+    """
+
+    def __init__(self):
+        super().__init__(all_points)
+        if map_on_screen_num == 3:
+            image = load_image('points_level3.png')
+        else:
+            image = load_image('points.png')
+        size_w = image.get_width()
+        size_h = image.get_height()
+        self.image = image
+        # вычисляем маску для эффективного сравнения
+        self.mask = pygame.mask.from_surface(self.image)
+        self.rect = self.image.get_rect()
+        self.rect.x = WIDTH // 2 - size_w // 2
+        self.rect.y = HEIGHT // 2 - size_h // 2
+
+
 def change_place(pos):
     """
     Изменение положения курсора
@@ -629,24 +956,6 @@ def show_menu(button):
         draw_back(text_menu, 'menu_2')
 
 
-class Map(pygame.sprite.Sprite):
-    """
-    Класс карты игры
-    """
-
-    def __init__(self, name):
-        super().__init__(all_maps)
-        image = load_image(name)
-        size_w = image.get_width()
-        size_h = image.get_height()
-        self.image = image
-        # вычисляем маску для эффективного сравнения
-        self.mask = pygame.mask.from_surface(self.image)
-        self.rect = self.image.get_rect()
-        self.rect.x = WIDTH // 2 - size_w // 2
-        self.rect.y = HEIGHT // 2 - size_h // 2
-
-
 def before_game(map=1):
     """
     Загрузка карты и расстановка ее элементов перед игрой
@@ -668,7 +977,7 @@ def before_game(map=1):
     elif map == 3:
         for i in range(2):
             GhostPlay(i)
-    pacman = Pacman(load_image("moving_pacman.png"), 2, 1, 33, 33)
+    pacman = Pacman(pacman_sprite, load_image("moving_pacman.png"), 2, 1, 24, 13)
     if map != 3:
         for i in range(lives):
             screen.blit(image_life, (100 + 43 * i, 685))
@@ -915,295 +1224,6 @@ def show_winn(button):
         draw_back(text, 'go1')
     elif button == 2:
         draw_back(text, 'go2')
-
-
-class GhostPlay(pygame.sprite.Sprite):
-    """
-    Класс призраков в игровом процессе
-    """
-
-    def __init__(self, num):
-        super().__init__(ghost_sprites)
-        image = load_image(GHOSTSGAME[num % 4][0])
-        size_h = image.get_height()
-        self.num = num % 4
-        # скорость призрака
-        self.v = 3
-        self.way = 1
-        self.p = 1
-        self.image = image
-        # вычисляем маску для эффективного сравнения
-        self.mask = pygame.mask.from_surface(self.image)
-        self.rect = self.image.get_rect()
-        if num % 2 == 0:
-            self.rect.x = WIDTH // 2 + 235
-            self.rect.y = HEIGHT // 2 - size_h // 2 - 20
-        else:
-            self.rect.x = WIDTH // 2 - 272
-            self.rect.y = HEIGHT // 2 - size_h // 2 - 20
-
-    def move(self):
-        """
-        Движение призрака по карте
-        :return:
-        """
-        global stop_game
-        if self.way == 1:
-            self.image = load_image(GHOSTSGAME[self.num][0])
-            self.rect.y -= self.v
-            if pygame.sprite.collide_mask(self, map_on_screen):
-                self.rect.y += 2 * self.v
-                self.way = choice([2, 4])
-
-        elif self.way == 2:
-            self.image = load_image(GHOSTSGAME[self.num][3])
-            self.rect.x += self.v
-            if pygame.sprite.collide_mask(self, map_on_screen):
-                self.rect.x -= 2 * self.v
-                self.way = choice([1, 3])
-
-        elif self.way == 3:
-            self.image = load_image(GHOSTSGAME[self.num][1])
-            self.rect.y += self.v
-            if pygame.sprite.collide_mask(self, map_on_screen):
-                self.rect.y -= 2 * self.v
-                self.way = choice([2, 4])
-
-        elif self.way == 4:
-            self.image = load_image(GHOSTSGAME[self.num][2])
-            self.rect.x -= self.v
-            if pygame.sprite.collide_mask(self, map_on_screen):
-                self.rect.x += 2 * self.v
-                self.way = choice([1, 3])
-
-        if self.way > 4:
-            self.way = 1
-
-        for pacman in pacman_sprite:
-            if pygame.sprite.collide_mask(self, pacman):
-                stop_game = True
-
-    def change(self):
-        """
-        Изменение направления движения призрака
-        :return:
-        """
-        last = self.way
-        while self.way == 4 - last:
-            self.way = randint(1, 4)
-
-
-class Pacman(pygame.sprite.Sprite):
-    def __init__(self, sheet, columns, rows, x, y):
-        super().__init__(pacman_sprite)
-        self.sheet_right = sheet
-        self.columns, self.rows = columns, rows
-        self.frames = []
-        self.cut_sheet(self.sheet_right, columns, rows)
-        self.cur_frame = 0
-        self.image = self.frames[self.cur_frame]
-        self.rect = self.rect.move(x, y)
-        if map_on_screen_num != 3:
-            self.rect.x = WIDTH // 2 - 13
-            self.rect.y = HEIGHT // 2 - 35
-        else:
-            self.rect.x = WIDTH // 2 - 7
-            self.rect.y = HEIGHT // 2 - 15
-        self.x1, self.y1 = self.rect.x, self.rect.y
-        self.speed = 9
-        self.last_pos = "right"
-
-        self.sheet_left = pygame.transform.flip(sheet, True, False)
-        self.sheet_up = pygame.transform.rotate(sheet, 90)
-        self.sheet_down = pygame.transform.rotate(sheet, -90)
-
-    def cut_sheet(self, sheet, columns, rows):
-        self.rect = pygame.Rect(0, 0, sheet.get_width() // columns,
-                                sheet.get_height() // rows)
-        for j in range(rows):
-            for i in range(columns):
-                frame_location = (self.rect.w * i, self.rect.h * j)
-                self.frames.append(sheet.subsurface(pygame.Rect(
-                    frame_location, self.rect.size)))
-
-    def update(self):
-        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
-        self.image = self.frames[self.cur_frame]
-
-    def move(self, pos):
-        global stop_game, score
-        if pos == "right":
-            if self.last_pos:
-                if self.last_pos == "up" or self.last_pos == "down":
-                    self.rows, self.columns = self.columns, self.rows
-
-            self.frames = []
-            self.cut_sheet(self.sheet_right, self.columns, self.rows)
-            self.cur_frame = 0
-            self.image = self.frames[self.cur_frame]
-            self.rect = self.rect.move(self.x1, self.y1)
-
-            self.rect.x += self.speed
-            self.x1 = self.rect.x
-            self.last_pos = "right"
-
-            if pygame.sprite.collide_mask(self, map_on_screen):
-                self.rect.x -= self.speed
-                self.x1 = self.rect.x
-
-        if pos == "left":
-            if self.last_pos:
-                if self.last_pos == "up" or self.last_pos == "down":
-                    self.rows, self.columns = self.columns, self.rows
-            self.frames = []
-            self.cut_sheet(self.sheet_left, self.columns, self.rows)
-            self.cur_frame = 0
-            self.image = self.frames[self.cur_frame]
-            self.rect = self.rect.move(self.x1, self.y1)
-
-            self.rect.x -= self.speed
-            self.x1 = self.rect.x
-            self.last_pos = "left"
-            if pygame.sprite.collide_mask(self, map_on_screen):
-                self.rect.x += self.speed
-                self.x1 = self.rect.x
-
-        if pos == "up":
-            if self.last_pos:
-                if self.last_pos != "up" and self.last_pos != "down":
-                    self.rows, self.columns = self.columns, self.rows
-
-            self.frames = []
-            self.cut_sheet(self.sheet_up, self.columns, self.rows)
-            self.cur_frame = 0
-            self.image = self.frames[self.cur_frame]
-            self.rect = self.rect.move(self.x1, self.y1)
-
-            self.rect.y -= self.speed
-            self.y1 = self.rect.y
-            self.last_pos = "up"
-
-            if pygame.sprite.collide_mask(self, map_on_screen):
-                self.rect.y += self.speed
-                self.y1 = self.rect.y
-
-        if pos == "down":
-            if self.last_pos:
-                if self.last_pos != "up" and self.last_pos != "down":
-                    self.rows, self.columns = self.columns, self.rows
-
-            self.frames = []
-            self.cut_sheet(self.sheet_down, self.columns, self.rows)
-            self.cur_frame = 0
-            self.image = self.frames[self.cur_frame]
-            self.rect = self.rect.move(self.x1, self.y1)
-
-            self.rect.y += self.speed
-            self.y1 = self.rect.y
-            self.last_pos = "down"
-
-            if pygame.sprite.collide_mask(self, map_on_screen):
-                self.rect.y -= self.speed
-                self.y1 = self.rect.y
-
-        for ghost in ghost_sprites:
-            if pygame.sprite.collide_mask(self, ghost):
-                if self.last_pos == "down":
-                    self.rect.y -= self.speed
-                if self.last_pos == "up":
-                    self.rect.y += self.speed
-                if self.last_pos == "left":
-                    self.rect.x += self.speed
-                if self.last_pos == "right":
-                    self.rect.x -= self.speed
-                stop_game = True
-
-        for point in all_points:
-            if pygame.sprite.collide_mask(self, point):
-                f = True
-                for rect in all_rects:
-                    if pygame.sprite.collide_mask(self, rect):
-                        f = False
-                if f:
-                    score += 10
-                    Rects(self.rect, self.last_pos)
-
-
-class Rects(pygame.sprite.Sprite):
-    """
-    Прямоугольники, закрывающие баллы
-    """
-
-    def __init__(self, pos, way):
-        super().__init__(all_rects)
-        image = load_image('rect.png')
-        self.image = image
-        # вычисляем маску для эффективного сравнения
-        self.mask = pygame.mask.from_surface(self.image)
-        self.rect = self.image.get_rect()
-        self.rect.x, self.rect.y = pos[0], pos[1]
-
-        if way == "left":
-            self.image = pygame.transform.rotate(image, 90)
-
-        if way == "right":
-            self.image = pygame.transform.rotate(image, 90)
-
-        '''
-        if way == "up":
-            #self.rect.y -= 5
-        if way == "down":
-            #self.rect.y += 5'''
-
-
-class Points(pygame.sprite.Sprite):
-    """
-    Загрузка и расстановка баллов на карте
-    """
-
-    def __init__(self):
-        super().__init__(all_points)
-        if map_on_screen_num == 3:
-            image = load_image('points_level3.png')
-        else:
-            image = load_image('points.png')
-        size_w = image.get_width()
-        size_h = image.get_height()
-        self.image = image
-        # вычисляем маску для эффективного сравнения
-        self.mask = pygame.mask.from_surface(self.image)
-        self.rect = self.image.get_rect()
-        self.rect.x = WIDTH // 2 - size_w // 2
-        self.rect.y = HEIGHT // 2 - size_h // 2
-
-
-class KillPacman(pygame.sprite.Sprite):
-    """
-    Анимация смерти пакмена
-    """
-
-    def __init__(self, sheet, columns, rows, x, y, start_x, start_y):
-        super().__init__(pacman_kill)
-        self.frames = []
-        self.cut_sheet(sheet, columns, rows)
-        self.cur_frame = 0
-        self.image = self.frames[self.cur_frame]
-        self.rect = self.rect.move(x, y)
-        self.rect.x = start_x
-        self.rect.y = start_y
-
-    def cut_sheet(self, sheet, columns, rows):
-        self.rect = pygame.Rect(0, 0, sheet.get_width() // columns,
-                                sheet.get_height() // rows)
-        for j in range(rows):
-            for i in range(columns):
-                frame_location = (self.rect.w * i, self.rect.h * j)
-                self.frames.append(sheet.subsurface(pygame.Rect(
-                    frame_location, self.rect.size)))
-
-    def update(self):
-        self.cur_frame = (self.cur_frame + 1) % len(self.frames)
-        self.image = self.frames[self.cur_frame]
 
 
 def new_record():
@@ -1544,6 +1564,9 @@ while True:
         all_rects.draw(screen)
         all_maps.draw(screen)
         pacman_sprite.draw(screen)
+        for pacman in pacman_sprite:
+            pacman.move()
+
         # Отрисовка оставшихся жизней
         if map_on_screen_num != 3:
             for i in range(lives):
@@ -1551,7 +1574,7 @@ while True:
         else:
             for i in range(lives):
                 screen.blit(image_life, (315 + 43 * i, 540))
-        if iterations == 20:
+        if iterations == 10:
             pacman_sprite.update()
             iterations = 0
         for ghost in ghost_sprites:
@@ -1575,8 +1598,8 @@ while True:
             start_game = False
             for pm in pacman_sprite:
                 x, y = pm.rect.x, pm.rect.y
-            kill_pacman = KillPacman(load_image("killing_pacman.png"),
-                                     11, 1, 32, 32, x, y)
+            kill_pacman = Pacman(pacman_kill, load_image("killing_pacman.png"),
+                                 11, 1, 32, 32, x, y)
 
     # Остановка игрового процесса
     if stop_game:
