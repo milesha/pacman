@@ -977,7 +977,7 @@ def before_game(map=1):
     elif map == 3:
         for i in range(2):
             GhostPlay(i)
-    pacman = Pacman(pacman_sprite, load_image("moving_pacman.png"), 2, 1, 24, 13)
+    pacman = Pacman(pacman_sprite, load_image("moving_pacman.png"), 2, 1, 22, 24)
     if map != 3:
         for i in range(lives):
             screen.blit(image_life, (100 + 43 * i, 685))
