@@ -6,7 +6,7 @@ from random import randint, choice
 pygame.init()
 pygame.display.set_caption('Pacman')
 
-FPS = 40
+FPS = 30
 WIDTH = 1200
 HEIGHT = 750
 
@@ -1632,4 +1632,5 @@ while True:
             else:
                 before_game(map_on_screen_num)
                 stop = False
+    clock.tick(FPS)
     pygame.display.flip()
